@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Браузерная игра про смену фармацевта первого стола в российской аптеке: рецепты, аналоги по МНН, маркировка, возвраты и Росздравнадзор.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='11' y='2' width='10' height='28' rx='2' fill='%23087a45'/%3E%3Crect x='2' y='11' width='28' height='10' rx='2' fill='%23087a45'/%3E%3C/svg%3E">
+<style>
+:root{color-scheme:light; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none !important}
+</style>
+<title>Первостольник</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&family=Unbounded:wght@500;700;800&display=swap">
+<style>
+/* Раскладка: вид из-за первого стола. Кафельная стена, табло показателей, покупатель у окошка, каждое решение пробивается чеком. */
+:root{
+  --bg:#e8efec; --grout:#d6e1dc; --glow-bg:rgba(8,122,69,0);
+  --surface:#ffffff; --surface-2:#f2f7f4;
+  --ink:#13211c; --muted:#52655c; --line:#cad8d1;
+  --cross:#087a45; --cross-ink:#ffffff; --cross-glow:rgba(8,122,69,0);
+  --stamp:#4a3aa8;
+  --good:#18794a; --warn:#a86b00; --bad:#bf3326;
+  /* бумага (рецепт, чек) светлая в обеих темах: это физический предмет */
+  --paper:#fbfaf3; --paper-ink:#1c1d1a; --paper-muted:#6a695f; --paper-line:#cfccbc;
+  --paper-good:#17703f; --paper-bad:#b3261e; --pen:#1f3a93; --paper-stamp:#4b36b0;
+  /* экран сканера тёмный в обеих темах */
+  --lcd-bg:#0e1913; --lcd-ink:#9ef0bf; --lcd-bad:#ff7b6b;
+  --f-display:"Unbounded","Arial Black",system-ui,sans-serif;
+  --f-body:"Golos Text","Segoe UI",Roboto,system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+  --f-hand:"Caveat","Segoe Print","Comic Sans MS",cursive;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0a120f; --grout:#111d18; --glow-bg:rgba(55,217,135,.13);
+    --surface:#111c18; --surface-2:#172520;
+    --ink:#e1eee8; --muted:#8ea79c; --line:#253731;
+    --cross:#37d987; --cross-ink:#05200f; --cross-glow:rgba(55,217,135,.55);
+    --stamp:#ab9fff;
+    --good:#52d18d; --warn:#f0b43c; --bad:#ff6f5f;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0a120f; --grout:#111d18; --glow-bg:rgba(55,217,135,.13);
+  --surface:#111c18; --surface-2:#172520;
+  --ink:#e1eee8; --muted:#8ea79c; --line:#253731;
+  --cross:#37d987; --cross-ink:#05200f; --cross-glow:rgba(55,217,135,.55);
+  --stamp:#ab9fff;
+  --good:#52d18d; --warn:#f0b43c; --bad:#ff6f5f;
+  color-scheme:dark;
+}
+
+body{
+  background-color:var(--bg);
+  background-image:
+    radial-gradient(56rem 24rem at 10% -5rem, var(--glow-bg), transparent 70%),
+    linear-gradient(var(--grout) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grout) 1px, transparent 1px);
+  background-size:auto, 46px 46px, 46px 46px;
+  color:var(--ink);
+  font:400 16px/1.5 var(--f-body);
+}
+.wrap{max-width:780px; margin:0 auto; padding-inline:16px; padding-block:18px 44px; display:grid; gap:16px}
+button{font:inherit}
+
+/* Вывеска и часы */
+.top{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap}
+.sign{display:flex; align-items:center; gap:12px; min-width:0}
+.cross{--s:34px; width:var(--s); height:var(--s); position:relative; flex:none}
+.cross::before,.cross::after{content:""; position:absolute; background:var(--cross); border-radius:3px; box-shadow:0 0 14px var(--cross-glow), 0 0 34px var(--cross-glow)}
+.cross::before{left:32%; width:36%; top:0; height:100%}
+.cross::after{top:32%; height:36%; left:0; width:100%}
+.sign-name{font:800 14px/1 var(--f-display); letter-spacing:.14em; text-transform:uppercase}
+.sign-sub{font:500 12px/1.3 var(--f-mono); color:var(--muted); margin-top:6px}
+.clock{text-align:right; font-family:var(--f-mono)}
+.clock b{display:block; font-size:26px; font-weight:700; line-height:1; font-variant-numeric:tabular-nums}
+.clock span{font-size:12px; color:var(--muted)}
+.steps{display:flex; gap:4px}
+.steps i{flex:1; height:4px; border-radius:2px; background:var(--line)}
+.steps i.done{background:var(--cross)}
+.steps i.now{background:var(--ink)}
+
+/* Табло показателей */
+.meters{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px}
+@media (max-width:640px){ .meters{grid-template-columns:repeat(2,minmax(0,1fr))} }
+.meter{position:relative; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:10px 12px 12px; min-width:0}
+.meter .lab{font:600 11px/1.2 var(--f-body); letter-spacing:.08em; text-transform:uppercase; color:var(--muted)}
+.meter .val{font:700 19px/1.2 var(--f-mono); font-variant-numeric:tabular-nums; margin-top:4px; white-space:nowrap}
+.meter .val small{font-size:11px; font-weight:400; color:var(--muted); margin-left:4px}
+.bar{height:6px; border-radius:3px; background:var(--surface-2); border:1px solid var(--line); overflow:hidden; margin-top:8px}
+.bar i{display:block; height:100%; background:var(--cross); transition:width .5s ease}
+.bar i.warn{background:var(--warn)}
+.bar i.bad{background:var(--bad)}
+.pop{position:absolute; right:10px; top:9px; font:700 12px var(--f-mono); pointer-events:none; animation:pop 1.8s ease-out forwards}
+.pop.up{color:var(--good)} .pop.down{color:var(--bad)}
+@keyframes pop{0%{transform:translateY(5px); opacity:0} 15%{opacity:1; transform:none} 75%{opacity:1} 100%{opacity:0; transform:translateY(-8px)}}
+
+/* Покупатель у окошка */
+.visit{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:18px; display:grid; gap:16px; animation:arrive .35s ease-out}
+@keyframes arrive{from{transform:translateY(10px); opacity:.35} to{transform:none; opacity:1}}
+.who{display:flex; align-items:center; gap:14px}
+.ava{width:78px; height:78px; border-radius:50%; background:var(--surface-2); border:1px solid var(--line); overflow:hidden; flex:none}
+.ava svg{width:100%; height:100%; display:block}
+.who-text{min-width:0; display:grid; gap:4px}
+.who-name{font:600 18px/1.2 var(--f-body)}
+.who-role{font-size:14px; line-height:1.35; color:var(--muted)}
+.tag{justify-self:start; font:600 10.5px/1 var(--f-mono); letter-spacing:.08em; text-transform:uppercase; color:var(--stamp); border:1px solid currentColor; border-radius:999px; padding:4px 8px}
+.say{margin:0; font:500 clamp(18px,2.6vw,21px)/1.45 var(--f-body); text-wrap:pretty; max-width:62ch}
+.say.q::before{content:"«"} .say.q::after{content:"»"}
+.say.narr{font-weight:400; color:var(--muted)}
+
+.choices{display:grid; gap:8px}
+.choice{display:flex; gap:12px; align-items:flex-start; width:100%; text-align:left; padding:13px 14px; border-radius:12px; border:1px solid var(--line); background:var(--surface-2); color:var(--ink); font:500 15.5px/1.4 var(--f-body); cursor:pointer; transition:border-color .15s, transform .12s}
+.choice:hover{border-color:var(--cross)}
+.choice:active{transform:scale(.995)}
+.choice:focus-visible{outline:2px solid var(--cross); outline-offset:2px}
+.choice kbd{font:600 12px/1 var(--f-mono); min-width:24px; height:24px; display:grid; place-items:center; border:1px solid var(--line); border-radius:6px; color:var(--muted); background:var(--surface); flex:none}
+.picked{font-size:15px; color:var(--muted); margin:0; display:flex; gap:8px; align-items:baseline}
+.picked b{color:var(--ink); font-weight:600}
+.picked span{font:600 11px var(--f-mono); letter-spacing:.08em; text-transform:uppercase; flex:none}
+
+/* Рецептурный бланк */
+.rx{background:var(--paper); color:var(--paper-ink); border:1px solid var(--paper-line); border-radius:4px; padding:14px 16px 12px; max-width:440px; font:400 11.5px/1.35 var(--f-body); transform:rotate(-.6deg); box-shadow:0 3px 12px rgba(0,0,0,.1)}
+.rx-top{display:flex; justify-content:space-between; gap:10px; color:var(--paper-muted); font-size:10px}
+.rx-title{font:700 13px var(--f-mono); letter-spacing:.35em; text-align:center; margin:8px 0 6px}
+.rx-row{display:flex; gap:8px; align-items:baseline; border-bottom:1px solid var(--paper-line); padding:3px 0; min-width:0}
+.rx-row span{color:var(--paper-muted); flex:none}
+.hand{font-family:var(--f-hand); color:var(--pen); font-size:21px; line-height:1.05; font-weight:500}
+.rx-rp{padding:8px 0 2px; font-size:22px; line-height:1.15}
+.rx-rp s{text-decoration-thickness:2px}
+.rx-foot{display:flex; align-items:center; gap:10px; justify-content:space-between; margin-top:4px}
+.rx-foot .hand{font-size:24px}
+.stamp{border:2px solid var(--paper-stamp); color:var(--paper-stamp); border-radius:50%; width:76px; height:76px; display:grid; place-items:center; text-align:center; font:700 8px/1.25 var(--f-mono); transform:rotate(-14deg); opacity:.82; flex:none; padding:6px}
+.rx-valid{font-size:10px; color:var(--paper-muted); margin-top:6px}
+
+/* Экран сканера */
+.scan{background:var(--lcd-bg); color:var(--lcd-ink); font:500 12.5px/1.6 var(--f-mono); border-radius:10px; padding:12px 14px; max-width:440px; border:1px solid rgba(0,0,0,.4); overflow-x:auto}
+.scan .bad{color:var(--lcd-bad); font-weight:700; animation:blink 1s steps(2) 4}
+@keyframes blink{50%{opacity:.25}}
+
+/* Чек */
+.slip{display:grid; filter:drop-shadow(0 8px 16px rgba(0,0,0,.16))}
+.receipt{justify-self:center; width:100%; max-width:540px; background:var(--paper); color:var(--paper-ink); font:400 13.5px/1.5 var(--f-mono); padding:18px 18px 32px;
+  -webkit-mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) 50%/16px 100%;
+  mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) 50%/16px 100%;
+  animation:print .5s ease-out}
+@keyframes print{from{clip-path:inset(0 0 55% 0)} to{clip-path:inset(0 0 0 0)}}
+.r-head{text-align:center; font-weight:600; letter-spacing:.08em; text-transform:uppercase; font-size:12px; line-height:1.6}
+.r-hr{border:0; border-top:1px dashed var(--paper-line); margin:12px 0}
+.r-story{font:400 15.5px/1.5 var(--f-body); margin:0}
+.r-line{display:flex; justify-content:space-between; gap:12px}
+.r-line .v{font-variant-numeric:tabular-nums; font-weight:700; white-space:nowrap}
+.v.up{color:var(--paper-good)} .v.down{color:var(--paper-bad)}
+.r-fact{font:400 14px/1.5 var(--f-body)}
+.r-fact b{display:block; font:700 11px/1.4 var(--f-mono); letter-spacing:.12em; color:var(--paper-stamp); margin-bottom:4px}
+.r-alert{font-weight:700; color:var(--paper-bad); text-align:center; letter-spacing:.06em}
+.actions{display:flex; gap:10px; flex-wrap:wrap; justify-content:center; align-items:center}
+
+.btn{font:700 15px/1 var(--f-display); letter-spacing:.02em; background:var(--cross); color:var(--cross-ink); border:0; border-radius:12px; padding:16px 24px; cursor:pointer; transition:transform .12s, box-shadow .2s; box-shadow:0 6px 20px -8px var(--cross-glow)}
+.btn:hover{transform:translateY(-1px); box-shadow:0 8px 26px -6px var(--cross-glow), 0 4px 10px -6px rgba(0,0,0,.3)}
+.btn:focus-visible{outline:3px solid var(--ink); outline-offset:3px}
+.btn.ghost{background:transparent; color:var(--ink); border:1px solid var(--line); box-shadow:none; font-size:13px}
+
+/* Заставка */
+.intro{display:grid; gap:18px; padding-block:22px 6px}
+.intro .cross{--s:58px; animation:neon 1.8s steps(1) 1}
+@keyframes neon{0%{opacity:.25} 8%{opacity:1} 12%{opacity:.3} 18%{opacity:1} 24%{opacity:.5} 30%,100%{opacity:1}}
+.eyebrow{margin:0; font:600 12px/1.3 var(--f-mono); letter-spacing:.12em; text-transform:uppercase; color:var(--cross)}
+.intro h1{margin:0; font:800 clamp(29px,8.2vw,70px)/1 var(--f-display); letter-spacing:-.02em; text-wrap:balance}
+.lede{margin:0; font-size:18px; line-height:1.5; max-width:60ch}
+.legend{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px}
+@media (max-width:540px){ .legend{grid-template-columns:1fr} }
+.legend div{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:12px 14px}
+.legend b{display:block; font:700 11.5px/1.3 var(--f-mono); letter-spacing:.08em; text-transform:uppercase; margin-bottom:4px}
+.legend p{margin:0; font-size:14.5px; color:var(--muted)}
+.rules{margin:0; color:var(--muted); max-width:62ch}
+.intro .actions{justify-content:flex-start}
+.best{font:500 13px var(--f-mono); color:var(--muted)}
+
+/* Итог */
+.rank{display:grid; gap:10px; text-align:center; padding-block:8px}
+.rank h2{margin:0; font:800 clamp(24px,6.2vw,46px)/1.1 var(--f-display); text-wrap:balance}
+.rank p{margin:0 auto; max-width:52ch; color:var(--muted); font-size:16.5px}
+.rank .eyebrow.over{color:var(--bad)}
+.log{list-style:none; margin:0; padding:0; display:grid; gap:8px}
+.log li{display:grid; grid-template-columns:auto auto minmax(0,1fr); gap:8px; align-items:start}
+.log .m{font-weight:700}
+.log .m.ok{color:var(--paper-good)} .log .m.bad{color:var(--paper-bad)} .log .m.meh{color:var(--paper-muted)}
+.log small{display:block; color:var(--paper-muted); font-size:12px; line-height:1.4}
+.big{font-size:15px; font-weight:700}
+#copybox{width:100%; max-width:540px; justify-self:center; min-height:92px; font:13px/1.5 var(--f-mono); background:var(--surface); color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:10px}
+
+.foot{margin:6px 0 0; font-size:12.5px; line-height:1.5; color:var(--muted); max-width:72ch}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation:none !important; transition:none !important}
+}
+</style>
+</head>
+<body>
+<div class="wrap" id="app" aria-live="polite"></div>
+
+<script>
+(function(){
+'use strict';
+
+const PLAN = 8000;
+const SHIFT_NO = 214;
+const START = {cash:0, trust:50, nerves:80, risk:10};
+const INSPECT_AT = 55;
+
+const today = new Date();
+const pad = n => String(n).padStart(2,'0');
+const fmtDate = d => pad(d.getDate()) + '.' + pad(d.getMonth()+1) + '.' + d.getFullYear();
+const daysAgo = n => { const d = new Date(today); d.setDate(d.getDate() - n); return fmtDate(d); };
+const nf = new Intl.NumberFormat('ru-RU');
+const rub = n => (n < 0 ? '−' : '') + nf.format(Math.abs(n)) + ' ₽';
+const sgn = n => (n > 0 ? '+' : n < 0 ? '−' : '') + nf.format(Math.abs(n));
+const clamp = (v, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, v));
+function plural(n, f){ const a = Math.abs(n) % 100, b = a % 10; if (a > 10 && a < 20) return f[2]; if (b > 1 && b < 5) return f[1]; if (b === 1) return f[0]; return f[2]; }
+function shuffle(arr){ const a = arr.slice(); for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+/* ---------- Портреты ---------- */
+const SK = ['#f3cfae', '#e3b08b', '#c78f6b'];
+const EYE = '#23201d', LIP = '#6b3b2e';
+function fig(x, y, s, skin, hair, top, mood){
+  const mouth = mood === 'angry' ? '<path d="M-4 6 L4 6" stroke="'+LIP+'" stroke-width="1.6" stroke-linecap="round"/>' : '<path d="M-4 6 Q0 8 4 6" stroke="'+LIP+'" stroke-width="1.6" fill="none" stroke-linecap="round"/>';
+  const brows = mood === 'angry' ? '<path d="M-8 -4 L-2 -2 M8 -4 L2 -2" stroke="'+EYE+'" stroke-width="1.5"/>' : '';
+  return '<g transform="translate('+x+' '+y+') scale('+s+')">' +
+    '<path d="M-22 42 Q-22 17 0 15 Q22 17 22 42Z" fill="'+top+'"/>' +
+    '<circle cx="0" cy="0" r="12.5" fill="'+skin+'"/>' +
+    '<path d="M-12.5 -1 Q-12.5 -14 0 -14 Q12.5 -14 12.5 -1 Q7 -8 0 -8 Q-7 -8 -12.5 -1Z" fill="'+hair+'"/>' +
+    '<circle cx="-4.5" cy="1" r="1.4" fill="'+EYE+'"/><circle cx="4.5" cy="1" r="1.4" fill="'+EYE+'"/>' + brows + mouth + '</g>';
+}
+function avatar(a){
+  if (a.item === 'lunch'){
+    const grains = [[34,44],[40,40],[47,38],[54,39],[61,41],[67,45],[38,45],[45,43],[52,43],[59,44],[44,47],[56,47]]
+      .map(p => '<ellipse cx="'+p[0]+'" cy="'+p[1]+'" rx="1.6" ry="1.1" fill="#5e3a1d"/>').join('');
+    return '<svg viewBox="0 0 100 100" aria-hidden="true">' +
+      '<path d="M40 30 Q36 24 40 18 M50 28 Q46 22 50 15 M60 30 Q56 24 60 18" fill="none" stroke-width="2" stroke-linecap="round" style="stroke:var(--muted)" opacity=".6"/>' +
+      '<path d="M24 52 Q50 30 76 52Z" fill="#8a5a34"/>' + grains +
+      '<rect x="20" y="48" width="60" height="30" rx="8" fill="#cfe3ec"/>' +
+      '<rect x="20" y="48" width="60" height="30" rx="8" fill="none" stroke="#6f8e9c" stroke-width="2"/>' +
+      '<path d="M74 22 L64 50" stroke="#8b9499" stroke-width="3" stroke-linecap="round"/>' +
+      '<path d="M71 16 L74 23 M75 15 L76.5 22.5 M79 16 L78 23.5" stroke="#8b9499" stroke-width="2" stroke-linecap="round"/>' +
+      '</svg>';
+  }
+  if (a.item === 'crowd'){
+    return '<svg viewBox="0 0 100 100" aria-hidden="true">' +
+      fig(26, 50, .85, SK[1], '#4a3426', '#6b7d8f', 'flat') +
+      fig(74, 48, .85, SK[0], '#b9b9b9', '#9b5b6f', 'flat') +
+      fig(50, 60, 1.15, SK[0], '#2b2320', '#3d6b5c', 'angry') + '</svg>';
+  }
+  const skin = SK[a.s || 0];
+  const st = a.st;
+  const small = st === 'scarf';
+  let s = '<svg viewBox="0 0 100 100" aria-hidden="true">';
+  if (st === 'long') s += '<path d="M29 46 Q27 18 50 17 Q73 18 71 46 L75 76 Q50 82 25 76Z" fill="'+a.hair+'"/>';
+  if (st === 'hood') s += '<path d="M24 62 Q22 14 50 13 Q78 14 76 62 Q76 76 50 78 Q24 76 24 62Z" fill="'+a.top+'"/>';
+  if (st === 'scarf') s += '<path d="M27 54 Q25 15 50 14 Q75 15 73 54 Q71 71 50 74 Q29 71 27 54Z" fill="'+a.scarf+'"/>';
+  s += '<path d="M14 100 Q14 73 50 71 Q86 73 86 100Z" fill="'+a.top+'"/>';
+  if (a.coat) s += '<path d="M38 73 L50 90 L62 73" fill="none" stroke="#b7bdb6" stroke-width="2"/><circle cx="50" cy="94" r="1.5" fill="#b7bdb6"/>';
+  s += '<rect x="43" y="57" width="14" height="16" rx="4" fill="'+skin+'"/><rect x="43" y="57" width="14" height="16" rx="4" fill="#000" opacity=".08"/>';
+  if (!small && st !== 'hood') s += '<circle cx="32" cy="47" r="4" fill="'+skin+'"/><circle cx="68" cy="47" r="4" fill="'+skin+'"/>';
+  s += '<ellipse cx="50" cy="'+(small ? 47 : 45)+'" rx="'+(small ? 15.5 : 18)+'" ry="'+(small ? 18.5 : 21)+'" fill="'+skin+'"/>';
+  switch (st){
+    case 'short': s += '<path d="M31 43 Q30 21 50 21 Q70 21 69 43 Q64 30 50 30 Q36 30 31 43Z" fill="'+a.hair+'"/>'; break;
+    case 'long':  s += '<path d="M32 42 Q32 22 50 22 Q68 22 68 42 Q60 29 50 30 Q40 31 32 42Z" fill="'+a.hair+'"/>'; break;
+    case 'bun':   s += '<circle cx="50" cy="19" r="8.5" fill="'+a.hair+'"/><path d="M32 42 Q31 22 50 22 Q69 22 68 42 Q62 31 50 31 Q38 31 32 42Z" fill="'+a.hair+'"/>'; break;
+    case 'bald':  s += '<path d="M31 46 Q30 37 35 33 L36 47Z M69 46 Q70 37 65 33 L64 47Z" fill="'+a.hair+'"/>'; break;
+    case 'cap':   s += '<path d="M31 41 Q31 20 50 20 Q69 20 69 41Z" fill="'+a.cap+'"/><path d="M52 38 Q72 35 82 41 Q72 43 52 41Z" fill="'+a.cap+'"/><path d="M31 41 L69 41" stroke="#000" stroke-opacity=".18" stroke-width="2"/>'; break;
+    case 'hood':  s += '<path d="M31 44 Q32 24 50 24 Q68 24 69 44 Q62 32 50 32 Q38 32 31 44Z" fill="'+(a.hair || '#222')+'"/><path d="M29 50 Q28 21 50 20 Q72 21 71 50" fill="none" stroke="#000" stroke-opacity=".22" stroke-width="3"/>'; break;
+    case 'scarf': s += '<path d="M33 39 Q35 26 50 26 Q65 26 67 39 Q60 31 50 31 Q40 31 33 39Z" fill="'+a.scarf+'"/><path d="M44 71 L50 82 L56 71Z" fill="'+a.scarf+'"/>'; break;
+  }
+  const ey = small ? 47 : 46;
+  s += '<circle cx="43" cy="'+ey+'" r="1.9" fill="'+EYE+'"/><circle cx="57" cy="'+ey+'" r="1.9" fill="'+EYE+'"/>';
+  const m = a.m || 'flat';
+  if (m === 'angry')   s += '<path d="M38 '+(ey-6)+' L46 '+(ey-4)+' M62 '+(ey-6)+' L54 '+(ey-4)+'" stroke="'+EYE+'" stroke-width="1.8" stroke-linecap="round"/>';
+  if (m === 'worried') s += '<path d="M38 '+(ey-4)+' L46 '+(ey-6.5)+' M62 '+(ey-4)+' L54 '+(ey-6.5)+'" stroke="'+EYE+'" stroke-width="1.8" stroke-linecap="round"/>';
+  const my = small ? 57 : 56;
+  const mouths = {
+    smile:   'M44 '+(my-1)+' Q50 '+(my+4)+' 56 '+(my-1),
+    flat:    'M45 '+my+' L55 '+my,
+    worried: 'M44 '+(my+1.5)+' Q50 '+(my-3)+' 56 '+(my+1.5),
+    angry:   'M44 '+(my+1)+' Q50 '+(my-1.5)+' 56 '+(my+1)
+  };
+  s += '<path d="'+mouths[m]+'" stroke="'+LIP+'" stroke-width="1.8" fill="none" stroke-linecap="round"/>';
+  if (a.g) s += '<g fill="none" stroke="#2a2a2a" stroke-width="1.5"><circle cx="43" cy="'+ey+'" r="5"/><circle cx="57" cy="'+ey+'" r="5"/><path d="M48 '+ey+' L52 '+ey+'"/></g>';
+  if (a.x === 'sun') s += '<rect x="36.5" y="'+(ey-4)+'" width="12" height="7.5" rx="3" fill="#161616"/><rect x="51.5" y="'+(ey-4)+'" width="12" height="7.5" rx="3" fill="#161616"/><path d="M48 '+(ey-1)+' L52 '+(ey-1)+'" stroke="#161616" stroke-width="1.6"/>';
+  if (a.x === 'phones') s += '<path d="M29 47 Q29 18 50 18 Q71 18 71 47" fill="none" stroke="#2b2b2b" stroke-width="4"/><rect x="25" y="42" width="8" height="13" rx="3" fill="#2b2b2b"/><rect x="67" y="42" width="8" height="13" rx="3" fill="#2b2b2b"/>';
+  if (a.x === 'tie') s += '<path d="M40 72 L50 80 L60 72" fill="none" stroke="#ececec" stroke-width="3"/><path d="M47.5 78 L52.5 78 L55 92 L50 98 L45 92Z" fill="#8c2f39"/>';
+  return s + '</svg>';
+}
+
+/* ---------- Реквизит ---------- */
+function rx(o){
+  return '<div class="rx" role="img" aria-label="Рецептурный бланк 107-1/у от ' + o.date + '">' +
+    '<div class="rx-top"><span>Министерство здравоохранения Российской Федерации</span><span>Форма № 107-1/у</span></div>' +
+    '<div class="rx-title">РЕЦЕПТ</div>' +
+    '<div class="rx-row"><span>Дата оформления</span><b class="hand">' + o.date + '</b></div>' +
+    '<div class="rx-row"><span>Ф. И. О. пациента</span><b class="hand">' + o.patient + '</b></div>' +
+    '<div class="rx-rp hand">' + o.lines.join('<br>') + '</div>' +
+    '<div class="rx-foot"><span>Подпись и печать<br>медицинского работника</span><span class="hand">' + o.sign + '</span><span class="stamp">ВРАЧ<br>' + o.doctor + '<br>ГП № 12</span></div>' +
+    '<div class="rx-valid">Рецепт действителен в течение 60 дней, до 1 года (нужное подчеркнуть)</div>' +
+  '</div>';
+}
+function scan(){
+  return '<div class="scan" role="img" aria-label="Экран кассы: продажа заблокирована, серия приостановлена">' +
+    'СКАН DataMatrix ........ OK<br>' +
+    'GTIN 04607021570183<br>' +
+    'SN   5hJ2kQx9Lp7Ta<br>' +
+    'СЕРИЯ 0425-18<br>' +
+    '<span class="bad">▲ ПРОДАЖА ЗАБЛОКИРОВАНА</span><br>' +
+    'Серия приостановлена Росздравнадзором' +
+  '</div>';
+}
+
+/* ---------- Визиты ----------
+   d: c касса (₽), t доверие, n нервы, r риск проверки
+   q: ok по правилам, meh спорно, bad нарушение */
+const CARDS = {
+  davlenie: { fixed:true, who:'Валентина Петровна', role:'пенсионерка, 74 года, пришла к открытию', tag:'Консультация',
+    av:{s:0, st:'scarf', scarf:'#8c3b5a', top:'#5b6b8c', g:1, m:'smile'},
+    say:'Мне от давления, как в прошлый раз. Белые такие, круглые. Название не помню, но вы же знаете!',
+    choices:[
+      {label:'Дать первые попавшиеся белые круглые таблетки', out:'Это оказался глицин. Давление он не снизил, зато Валентина Петровна ушла удивительно спокойной.', d:{c:45, t:-8, r:5}, q:'bad'},
+      {label:'Найти по карте лояльности, что она брала раньше, и отпустить без рецепта', out:'В истории покупок нашёлся лозартан 50 мг. Рецепт, по словам Валентины Петровны, лежит дома на холодильнике. Вы поверили холодильнику.', d:{c:390, t:6, r:14}, q:'bad'},
+      {label:'Попросить принести упаковку или рецепт и объяснить зачем', out:'Валентина Петровна ушла, ворча. Через час вернулась с коробкой и рецептом, получила свой препарат и оставила вам конфету «Коровка».', d:{c:380, t:10, n:-5}, q:'ok'}
+    ],
+    fact:'Почти все препараты от давления в России отпускаются по рецепту. А «белые круглые» — это примерно половина всех таблеток в аптеке.'
+  },
+  antibiotic: { who:'Геннадий', role:'менеджер по продажам, 45 лет, держится за горло', tag:'Рецептура',
+    av:{s:1, st:'short', hair:'#3b2f28', top:'#2c3440', x:'tie', m:'flat'},
+    say:'Дайте амоксициллин. Горло третий день. Мне всегда без рецепта давали, давайте без лекций.',
+    choices:[
+      {label:'Продать: раз всегда давали, значит можно', out:'Геннадий доволен, касса плюс 240 рублей. Камера над кассой тоже всё записала, но она никому не расскажет. Пока.', d:{c:240, t:2, r:22}, q:'bad'},
+      {label:'Отказать, предложить средство для горла без рецепта и отправить к терапевту', out:'Геннадий сказал, что в соседней аптеке дадут. Но пастилки купил и уже в дверях спросил, работает ли поликлиника в субботу.', d:{c:450, t:4, n:-8}, q:'ok'},
+      {label:'Прочитать лекцию об антибиотикорезистентности', out:'Лекция длилась семь минут. Очередь слушала. Геннадий ушёл, ничего не купив, но слово «резистентность» теперь знает.', d:{t:1, n:-12}, q:'meh'}
+    ],
+    fact:'Антибиотики в России отпускаются только по рецепту на бланке 107-1/у. Продажа без рецепта нарушает лицензионные требования, и за неё штрафуют аптеку.'
+  },
+  expired: { who:'Ольга', role:'бухгалтер, 38 лет', tag:'Рецептура',
+    av:{s:0, st:'long', hair:'#7a4a2a', top:'#6f8f7a', g:1, m:'flat'},
+    say:'Вот рецепт, мне кларитромицин. Выписали недавно. Ну, относительно недавно.',
+    prop:() => rx({date:daysAgo(97), patient:'Соколова О. В.', lines:['Rp.: Clarithromycini 500 mg','D. t. d. N 14 in tab.','S. По 1 таб. 2 раза в день'], sign:'Ивано', doctor:'ИВАНОВА А. С.'}),
+    choices:[
+      {label:'Отпустить: дата почти свежая', out:'Вы решили, что «почти» тоже срок. Ольга ушла довольная, а рецепт трёхмесячной давности лёг в архив до первой проверки.', d:{c:620, t:2, r:18}, q:'bad'},
+      {label:'Объяснить, что рецепт истёк, и отправить за новым', out:'Ольга вздохнула и записалась к врачу прямо у кассы. Через два дня вернулась с новым рецептом, и снова к вашему окошку.', d:{t:5, n:-6}, q:'ok'},
+      {label:'Предложить «аналог посильнее, который без рецепта»', out:'Таких не бывает. Вы продали иммуномодулятор за 1 290 рублей, и Ольга пока не знает, что это не антибиотик.', d:{c:1290, t:-12, r:8}, q:'bad'}
+    ],
+    fact:'Рецепт на бланке 107-1/у действует 60 дней со дня оформления. Для пациентов с хроническими болезнями врач может установить срок до одного года.'
+  },
+  baby: { who:'Катя', role:'мама, 26 лет, с коляской, из которой громко возражают', tag:'Консультация',
+    av:{s:0, st:'long', hair:'#c9a063', top:'#d98c6a', m:'worried'},
+    say:'Сыну восемь месяцев, с утра температура 39. Дайте что-нибудь сильное. Можно взрослую таблетку разломить?',
+    choices:[
+      {label:'Разломить взрослую таблетку пополам', out:'Так нельзя: во взрослой таблетке совсем другая доза. Катя прочитала инструкцию уже дома и написала отзыв. Справедливый.', d:{c:60, t:-18, r:15}, q:'bad'},
+      {label:'Детская форма, доза по весу малыша и срочно вызвать педиатра', out:'Вы показали, как отмерить дозу шприцем-дозатором, и сказали вызвать врача сегодня же. Катя сказала «спасибо» три раза, коляска один.', d:{c:310, t:14, n:-3}, q:'ok'},
+      {label:'Собрать всё из детского отдела: сироп, свечи, пластырь, витамины', out:'Чек на 3 870 рублей. Половина покупок не поможет, и Катя поняла это к вечеру.', d:{c:3870, t:-10, r:3}, q:'bad'}
+    ],
+    fact:'Детям жаропонижающие дают только в детских формах и в дозе по весу ребёнка. При высокой температуре у ребёнка до года нужно вызвать врача.'
+  },
+  analog: { who:'Дмитрий', role:'разработчик, 31 год, не снимает наушники', tag:'Аналоги',
+    av:{s:1, st:'short', hair:'#1f1f1f', top:'#3d5a80', x:'phones', m:'flat'},
+    say:'Мне «Брендофен Экспресс Ультра». Который по телевизору, с молнией на коробке.',
+    choices:[
+      {label:'Молча пробить «Брендофен» за 459 ₽', out:'Дмитрий так и не узнал, что внутри обычный ибупрофен. Заведующая показала вам через стекло большой палец.', d:{c:459, t:-2, r:12}, q:'bad'},
+      {label:'Сказать, что есть ибупрофен того же МНН за 64 ₽, и дать выбрать', out:'Дмитрий взял ибупрофен, а на сэкономленное купил воду и пластыри. Уходя, снял один наушник и сказал: «Спасибо, что не развели».', d:{c:140, t:12}, q:'ok'},
+      {label:'Продать «Брендофен», защиту для желудка и витамины для мозга', out:'Комплексная продажа на 1 340 рублей! Дмитрий понял, что его развели, уже в метро, когда прочитал состав.', d:{c:1340, t:-8, r:12}, q:'bad'}
+    ],
+    fact:'Аптека обязана сообщать покупателю о препаратах с тем же МНН по более низкой цене. За нарушение грозит предупреждение или штраф: 3–5 тыс. ₽ для должностного лица и 30–40 тыс. ₽ для аптеки (ч. 3 ст. 14.1 КоАП).'
+  },
+  refund: { who:'Аркадий Львович', role:'пенсионер, 62 года, с чеком и принципами', tag:'Возврат',
+    av:{s:0, st:'bald', hair:'#9a9a9a', top:'#6b5d4f', g:1, m:'angry'},
+    say:'Вчера купил не то. Коробку даже не вскрывал! Верните деньги, я знаю свои права.',
+    choices:[
+      {label:'Вернуть деньги и поставить пачку обратно на полку', out:'Аркадий Львович счастлив. А пачка, которая провела ночь неизвестно где и при какой температуре, снова в продаже. Так нельзя.', d:{c:-520, t:6, r:20}, q:'bad'},
+      {label:'Вежливо отказать со ссылкой на закон', out:'Аркадий Львович потребовал книгу отзывов и заведующую. Исписал две страницы. Юрист сети потом сказал, что вы всё сделали правильно.', d:{t:-3, n:-12}, q:'ok'},
+      {label:'Отказать, но выяснить, что ему было нужно на самом деле', out:'Оказалось, он хотел таблетки от изжоги, а купил от запора. Вы подобрали нужное, он купил и даже улыбнулся. Книга отзывов не понадобилась.', d:{c:310, t:8, n:-6}, q:'ok'}
+    ],
+    fact:'Лекарства надлежащего качества не подлежат обмену и возврату (постановление Правительства РФ № 2463). Вернуть можно только брак: например, пустой блистер или повреждённую упаковку.'
+  },
+  scanner: { who:'Виктория', role:'дизайнер, 29 лет, опаздывает на поезд', tag:'Маркировка',
+    av:{s:0, st:'bun', hair:'#2b1d16', top:'#9b3d3d', m:'worried'},
+    say:'Мне вот эти, от аллергии. Только быстрее, пожалуйста, поезд через сорок минут!',
+    prop:scan,
+    choices:[
+      {label:'Продать мимо кассы: «сканер глючит»', out:'Приостановленная серия ушла к покупателю. Касса запомнила попытку, а система маркировки не забывает ничего.', d:{c:390, t:2, r:30}, q:'bad'},
+      {label:'Убрать пачку в карантин и дать ту же таблетку другой серии', out:'Другую серию нашли за двадцать секунд. Виктория успела на поезд, а заблокированная пачка отправилась в карантинную зону.', d:{c:390, t:8, n:-3}, q:'ok'},
+      {label:'Позвонить заведующей и спросить, что делать', out:'Заведующая ответила с третьего раза и спросила: «Вы что, сами не знаете?» Виктория к тому моменту уже убежала.', d:{t:-6, n:-10}, q:'meh'}
+    ],
+    fact:'Каждая упаковка лекарства в России маркирована кодом DataMatrix и отслеживается в системе МДЛП. Если серию приостановили или забраковали, продавать её нельзя, а упаковки убирают в карантинную зону.'
+  },
+  boss: { who:'Тамара Викторовна', role:'заведующая аптекой, с планшетом и планом', tag:'Начальство',
+    av:{s:1, st:'bun', hair:'#6a2e1c', top:'#f1f2ee', coat:1, g:1, m:'flat'},
+    say:'Сегодня товар дня: «Иммуно-Щит Форте». Это БАД. Предлагаем каждому. Мне нужно пятнадцать штук, вопросы?',
+    choices:[
+      {label:'«Будет сделано!» Предлагать всем как средство от всего', out:'Продали одиннадцать штук. Трое спросили, от чего он помогает, вы ответили «от всего». Четвёртый покупатель оказался юристом.', d:{c:2860, t:-14, r:14}, q:'bad'},
+      {label:'Предлагать честно: «это БАД, не лекарство»', out:'Продали четыре штуки тем, кому было интересно. Тамара Викторовна поджала губы. Совесть при этом не поджалась.', d:{c:1040, t:4, n:-6}, q:'ok'},
+      {label:'Кивнуть и забыть', out:'В три часа дня Тамара Викторовна проверила чеки. Разговор получился долгим и в основном односторонним.', d:{n:-18}, q:'meh'}
+    ],
+    fact:'БАД не является лекарством. Закон о рекламе требует, чтобы реклама БАД сопровождалась предупреждением «не является лекарственным средством».'
+  },
+  mystery: { who:'Мужчина в сером', role:'без особых примет. Слишком без особых примет', tag:'Проверка сети',
+    av:{s:0, st:'short', hair:'#7a7a7a', top:'#8a8f94', m:'flat'},
+    say:'Посоветуйте что-нибудь от изжоги. (Смотрит на вас очень внимательно.)',
+    choices:[
+      {label:'Быстро дать первое, что лежит на витрине', out:'Через неделю пришёл отчёт тайного покупателя: «Не уточнил симптомы, не предложил альтернативу, не попрощался». Премия похудела.', d:{c:180, t:-6, n:-8}, q:'bad'},
+      {label:'Расспросить: как давно, после чего, что ещё принимает', out:'Отчёт тайного покупателя: 10 из 10. Отдельно отмечена фраза «если изжога дольше двух недель, покажитесь гастроэнтерологу».', d:{c:260, t:10, n:8}, q:'ok'},
+      {label:'Продать средство от изжоги и три БАДа «для комфорта желудка»', out:'В отчёте написано «активная допродажа» и сразу под этим «навязывание». Два пункта чек-листа сгорели.', d:{c:1750, t:-6, n:-4}, q:'meh'}
+    ],
+    fact:'Сетевые аптеки регулярно отправляют к себе тайных покупателей. Те проверяют приветствие, вопросы о симптомах, рассказ о ценах и аналогах и прощание.'
+  },
+  student: { who:'Тимур', role:'студент, 20 лет, третьи сутки без сна', tag:'Консультация',
+    av:{s:2, st:'hood', hair:'#1e1e1e', top:'#4a4f7a', m:'worried'},
+    say:'Дайте что-нибудь, чтобы не спать ещё двое суток. У меня сопромат.',
+    choices:[
+      {label:'Глицин! Две пачки', out:'Тимур рассасывал глицин всю ночь и сдал сопромат на тройку. Уверен, что благодаря глицину. Вы не стали его разубеждать.', d:{c:120, t:3}, q:'meh'},
+      {label:'Честно сказать, что лучше всего работают шесть часов сна', out:'Тимур посмотрел на вас как на предателя. Но по дороге домой уснул в метро и проехал две станции. Организм с вами согласен.', d:{t:6, n:-3}, q:'ok'},
+      {label:'Энергетики, кофеин в таблетках и витамины «для мозга»', out:'Тимур купил всё. В три часа ночи он начал слышать цвета. Сопромат пришлось пересдавать.', d:{c:890, t:-10, r:4}, q:'bad'}
+    ],
+    fact:'Глицин — главное народное «средство от всего» в российских аптеках. Доказательств его пользы для памяти и сна при этом мало.'
+  },
+  cat: { who:'Людмила', role:'55 лет, куртка в кошачьей шерсти', tag:'Консультация',
+    av:{s:0, st:'short', hair:'#a0522d', top:'#7d6a9c', g:1, m:'worried'},
+    say:'У Барсика температура, лежит вялый. Можно ему четвертинку парацетамола? Он же маленький.',
+    choices:[
+      {label:'Отрезать четвертинку: кот же маленький', out:'Ни в коем случае! Для кошек парацетамол ядовит даже в крошечной дозе. Хорошо, что Людмила сначала позвонила ветеринару.', d:{c:40, t:-15, r:6}, q:'bad'},
+      {label:'Остановить: парацетамол смертельно опасен для кошек, срочно к ветеринару', out:'Людмила ахнула и поехала в ветклинику. Через два дня Барсик передал вам привет: фото в телефоне, хвост трубой.', d:{t:15, n:4}, q:'ok'},
+      {label:'Продать витамины для иммунитета «для всей семьи»', out:'Барсику витамины не помогли. Людмила всё равно поехала к ветеринару, только на три часа позже.', d:{c:350, t:-6}, q:'bad'}
+    ],
+    fact:'Парацетамол смертельно опасен для кошек: их печень не умеет его обезвреживать. Человеческие лекарства животным дают только по назначению ветеринара.'
+  },
+  codeine: { who:'Мужчина в капюшоне', role:'возраст неясен, кашляет подчёркнуто', tag:'Рецептура',
+    av:{s:1, st:'hood', hair:'#2a2a2a', top:'#333a36', m:'flat'},
+    say:'Мне те таблетки от кашля, с кодеином. Пять пачек. Кашель сильный. Кхе.',
+    choices:[
+      {label:'Продать пять пачек', out:'Кашель чудесным образом прошёл ещё на выходе. Через месяц в аптеку пришли с распечаткой продаж и вопросами.', d:{c:1450, r:35}, q:'bad'},
+      {label:'Только по рецепту. Предложить сироп от кашля без рецепта', out:'Мужчина потерял интерес к лечению и ушёл ни с чем. Кашлять он перестал там же, в дверях.', d:{t:2, n:-5}, q:'ok'},
+      {label:'«Одну пачку можно. Только вам»', out:'Одна пачка без рецепта — всё равно продажа без рецепта. Проверяющие скидку «только вам» не делают.', d:{c:290, r:20}, q:'bad'}
+    ],
+    fact:'Препараты с кодеином в России с 2012 года отпускаются только по рецепту, даже если кодеина в таблетке совсем немного.'
+  },
+  correction: { who:'Нина Сергеевна', role:'пенсионерка, 67 лет, рецепт в прозрачном файлике', tag:'Рецептура',
+    av:{s:0, st:'bun', hair:'#cfcfcf', top:'#4d7a74', g:1, m:'smile'},
+    say:'Врач сначала написал пять миллиграмм, потом исправил на десять. Ручкой. Но это же он сам исправил, я видела!',
+    prop:() => rx({date:daysAgo(4), patient:'Белова Н. С.', lines:['Rp.: Bisoprololi <s>5</s> 10 mg','D. t. d. N 30 in tab.','S. По 1 таб. утром'], sign:'Кузн', doctor:'КУЗНЕЦОВ П. Р.'}),
+    choices:[
+      {label:'Отпустить: врач же сам исправил', out:'Рецепт с исправлением недействителен, даже если исправлял лично Гиппократ. Проверка найдёт его в архиве.', d:{c:280, t:3, r:15}, q:'bad'},
+      {label:'Не принимать и позвонить в поликлинику, чтобы выписали новый', out:'В регистратуру вы дозвонились с девятой попытки. Врач обещал переписать рецепт завтра, а Нина Сергеевна принесла вам пирожок с капустой.', d:{t:10, n:-8}, q:'ok'},
+      {label:'Отпустить, но по старой дозировке 5 мг', out:'Вы решили за врача, какая доза правильная. Это тоже нарушение, просто с другой стороны.', d:{c:190, t:-4, r:12}, q:'bad'}
+    ],
+    fact:'По приказу Минздрава № 1094н исправления в рецепте не допускаются. Рецепт на бланке 107-1/у подписывает врач и заверяет своей печатью.'
+  },
+  insulin: { who:'Борис Ефимович', role:'дачник, 70 лет', tag:'Консультация',
+    av:{s:1, st:'cap', cap:'#5b6b3a', top:'#7a6a4a', m:'smile'},
+    say:'Я инсулин на зиму в морозилку положу, чтобы дольше хранился. Правильно же?',
+    choices:[
+      {label:'«Конечно, как пельмени»', out:'После заморозки инсулин непригоден. Борису Ефимовичу повезло: внук прочитал инструкцию раньше, чем инсулин понадобился.', d:{t:-12, r:4}, q:'bad'},
+      {label:'Объяснить: запас держат в холодильнике при +2…+8 °C, замораживать нельзя', out:'Борис Ефимович записал всё на обороте рецепта и сказал, что у вас «голова светлая». Лучший отзыв за неделю.', d:{t:14, n:2}, q:'ok'},
+      {label:'Объяснить правила хранения и предложить термочехол для дачи', out:'Термочехол оказался именно тем, что нужно на даче. Честная допродажа, редкая птица.', d:{c:690, t:10}, q:'ok'}
+    ],
+    fact:'Запас инсулина хранят в холодильнике при +2…+8 °C, замораживать его нельзя. Начатую шприц-ручку обычно держат при комнатной температуре; сколько именно, сказано в инструкции.'
+  },
+  queue: { who:'Очередь из девяти человек', role:'и все торопятся', tag:'Смена', narr:true,
+    av:{item:'crowd'},
+    say:'Касса зависла на «Ожидании ответа ОФД». В конце очереди кто-то громко вспоминает, как раньше было лучше.',
+    choices:[
+      {label:'Перезагрузить кассу и извиниться перед очередью', out:'Касса перезагрузилась за четыре минуты. Очередь ворчала, но осталась. Кто-то из середины сказал: «Ничего, бывает».', d:{c:600, t:2, n:-10}, q:'ok'},
+      {label:'Выйти «на минуточку» подышать', out:'Когда вы вернулись, очередь выросла до четырнадцати человек, а касса перезагрузилась сама. Вам не аплодировали.', d:{c:300, t:-10, n:10}, q:'bad'},
+      {label:'Позвать коллегу на вторую кассу', out:'Светлана пришла с обеда, вздохнула и открыла вторую кассу. Очередь рассосалась за десять минут. С вас шоколадка для Светланы.', d:{c:900, t:6, n:-4}, q:'ok'}
+    ],
+    fact:'Каждый чек онлайн-кассы уходит в налоговую через оператора фискальных данных (ОФД). Если связи нет, касса хранит чеки у себя и отправляет их позже.'
+  },
+  coins: { who:'Зинаида Павловна', role:'81 год, кошелёк-гармошка', tag:'Смена',
+    av:{s:0, st:'scarf', scarf:'#3d5a80', top:'#8c6b4a', g:1, m:'smile'},
+    say:'С меня 347 рублей? Сейчас, у меня без сдачи. Рубль, два, три…',
+    choices:[
+      {label:'Терпеливо считать вместе с ней', out:'Считали шесть минут. Очередь вздыхала хором. Зинаида Павловна рассказала про внука-программиста и оставила три рубля «на чай».', d:{c:347, t:10, n:-12}, q:'ok'},
+      {label:'Сгрести мелочь и принять на глаз', out:'На глаз вышло 290 рублей. Недостачу вечером искали всей аптекой.', d:{c:290, n:-2, r:4}, q:'bad'},
+      {label:'Предложить досчитать у окна, пока вы обслуживаете следующих', out:'Зинаида Павловна сосредоточенно считала у окна, пока вы обслужили троих. Сошлось до копейки.', d:{c:1100, t:6, n:-4}, q:'ok'}
+    ],
+    fact:'Монеты Банка России обязательны к приёму при любых платежах, поэтому отказать в оплате мелочью аптека не может.'
+  },
+  hangover: { who:'Сергей', role:'40 лет, после корпоратива, солнечные очки в помещении', tag:'Консультация',
+    av:{s:1, st:'short', hair:'#6b4a2b', top:'#5c6b73', x:'sun', m:'worried'},
+    say:'Мне что-нибудь для печени. И чтобы к девяти я был человеком.',
+    choices:[
+      {label:'Курс гепатопротекторов на три месяца за 2 400 ₽', out:'Сергей купил курс «для печени» и стал человеком к среде. Гепатопротекторы тут ни при чём.', d:{c:2400, t:-6}, q:'meh'},
+      {label:'Вода, раствор для регидратации и честное «печень лечится трезвостью»', out:'На слове «трезвость» Сергей обиделся, но раствор купил. К девяти он был почти человеком.', d:{c:310, t:8}, q:'ok'},
+      {label:'Посоветовать народный метод с рассолом', out:'Рассол продают в магазине через дорогу. Аптека заработала ноль, зато вы стали легендой района.', d:{t:4, n:6}, q:'meh'}
+    ],
+    fact:'Гепатопротекторы годами входят в число самых продаваемых препаратов в России, хотя доказательства пользы у многих из них слабые.'
+  },
+  tv: { who:'Раиса Ивановна', role:'69 лет, смотрит телевизор внимательно', tag:'Консультация',
+    av:{s:0, st:'bun', hair:'#b8b8b8', top:'#a64d6d', m:'smile'},
+    say:'Мне то, что вчера по телевизору показывали. Там мужчина бежал, и у него суставы перестали болеть. Коробка синяя. Или зелёная.',
+    choices:[
+      {label:'Выдать самое дорогое средство для суставов', out:'Цвет коробки вы угадали, всё остальное нет. Раиса Ивановна вернётся через месяц разочарованной.', d:{c:1890, t:-8}, q:'bad'},
+      {label:'Расспросить про суставы, предложить недорогую мазь и посоветовать ортопеда', out:'Оказалось, колено болит после дачи. Недорогая мазь и совет показаться ортопеду. Раиса Ивановна назвала вас «толковым человеком».', d:{c:260, t:10, n:-6}, q:'ok'},
+      {label:'Найти ролик в интернете и продать именно то', out:'Нашли за двенадцать минут. Это был БАД. Раиса Ивановна счастлива, очередь нет.', d:{c:1490, t:2, n:-14}, q:'meh'}
+    ],
+    fact:'Рекламировать рецептурные лекарства широкой публике в России запрещено. По телевизору показывают только безрецептурные препараты и БАДы.'
+  },
+  change: { who:'Мужчина с самокатом', role:'35 лет, очень уверен в себе', tag:'Смена',
+    av:{s:1, st:'cap', cap:'#e05a2b', top:'#2e7d6b', m:'angry'},
+    say:'Вы мне сдачу недодали! Я вам пятитысячную давал, а не тысячу!',
+    choices:[
+      {label:'Отдать разницу, лишь бы ушёл', out:'Вечером в кассе недостача 4 000 рублей. Мужчина с самокатом, судя по всему, доволен.', d:{c:-4000, t:2, n:4}, q:'bad'},
+      {label:'Спокойно предложить пересчитать кассу при нём', out:'На середине пересчёта мужчина вспомнил, что пятитысячную отдал утром в кофейне. Извинился. Почти.', d:{t:6, n:-10}, q:'ok'},
+      {label:'Спорить до победного', out:'Спорили пятнадцать минут. Победили вы. Очередь сняла всё на телефон, и видео уже в районном чате.', d:{t:-8, n:-18}, q:'meh'}
+    ],
+    fact:'При споре о сдаче делают пересчёт кассы: наличные сверяют с суммой по чекам за смену. Обычно всё решается за пять минут.'
+  },
+  milk: { who:'Алина', role:'33 года, в панике, с телефоном в руке', tag:'Консультация',
+    av:{s:2, st:'long', hair:'#2b1d16', top:'#e0a458', m:'worried'},
+    say:'Я запила антибиотик молоком! А в инструкции написано, что нельзя. Мне теперь в больницу?',
+    choices:[
+      {label:'«Да, срочно в больницу!»', out:'Алина уехала в приёмный покой. Там ей спокойно сказали то, что должны были сказать вы.', d:{t:-10, n:-6}, q:'bad'},
+      {label:'Успокоить: лекарство могло хуже усвоиться, следующий приём по инструкции и с водой', out:'Алина выдохнула, купила воды и ещё раз выдохнула. Если сомнения останутся, она позвонит врачу.', d:{c:45, t:12}, q:'ok'},
+      {label:'Продать сорбент, «чтобы вывести молоко»', out:'Сорбент заодно связал и антибиотик. Теперь лечение работает ещё хуже.', d:{c:230, t:-6}, q:'bad'}
+    ],
+    fact:'Молочные продукты снижают всасывание некоторых антибиотиков, например тетрациклинов и фторхинолонов. Сорбенты тоже мешают лекарствам всасываться, поэтому их принимают с интервалом.'
+  },
+  bahily: { who:'Курьер', role:'в жёлтой куртке, мотор не выключал', tag:'Смена',
+    av:{s:2, st:'cap', cap:'#e8a317', top:'#e8a317', m:'flat'},
+    say:'Бахилы есть? Срочно! У меня доставка в поликлинику.',
+    choices:[
+      {label:'Продать одну пару за 5 ₽', out:'Самая быстрая продажа дня. Пять рублей тоже деньги.', d:{c:5, t:2}, q:'ok'},
+      {label:'Предложить упаковку на сто пар', out:'Курьер подумал и взял сотню. Теперь он главный по бахилам на районе.', d:{c:390, t:2}, q:'ok'},
+      {label:'«Бахилы закончились. Как и моё терпение»', out:'Фраза прозвучала эффектно. Курьер ушёл в аптеку напротив. Бахилы при этом лежат на витрине.', d:{t:-4, n:5}, q:'meh'}
+    ],
+    fact:'Кроме лекарств аптека по закону может продавать медицинские изделия, БАДы, средства гигиены, лечебное и детское питание, минеральную воду и ещё несколько групп товаров.'
+  },
+  lunch: { fixed:true, who:'Обеденный перерыв', role:'полчаса и контейнер с гречкой', tag:'Смена', narr:true,
+    av:{item:'lunch'},
+    say:'Аптека на обед не закрывается, но полчаса вам положено. Коллега прикроет, если попросить.',
+    choices:[
+      {label:'Спокойно поесть в подсобке', out:'Гречка, чай и десять минут тишины. Нервы благодарят.', d:{n:22}, q:'ok'},
+      {label:'Есть за кассой между покупателями', out:'Обслужили пятерых с вилкой в руке. Выручка есть, гречка остыла, покупатели смотрели с сочувствием.', d:{c:700, t:2, n:4}, q:'meh'},
+      {label:'Вместо обеда сделать выкладку товара дня', out:'Витрина теперь идеальна. Тамара Викторовна одобрительно кивнула. Желудок не кивнул.', d:{c:400, n:-8}, q:'meh'}
+    ],
+    fact:'Работнику положен перерыв для отдыха и питания от 30 минут до двух часов, и в рабочее время он не включается (ст. 108 Трудового кодекса РФ).'
+  },
+  inspection: { fixed:true, who:'Инспектор Росздравнадзора', role:'с папкой и очень спокойным лицом', tag:'Проверка',
+    av:{s:0, st:'short', hair:'#444444', top:'#2f3b52', x:'tie', g:1, m:'flat'},
+    say:'Добрый день. Внеплановая проверка. Покажите рецепты за месяц, журналы и ценники.',
+    choices:[
+      {label:'Спокойно выдать все документы', dyn: s => { const f = fineOf(s); return {out: f ? found(s) + ' Штраф ' + rub(f) + '. Зато следующую проверку в ближайшее время можно не ждать.' : 'Нарушений не нашли. Инспектор даже кивнул на прощание. Это почти медаль.', d:{c:-f, n:-6, r:-40}, q:'ok', fine:f}; }},
+      {label:'Предложить чай с конфетами', dyn: s => { const f = fineOf(s); return {out:'Инспектор вежливо отказался и что-то долго записывал. ' + (f ? found(s) + ' Штраф ' + rub(f) + '.' : 'Нарушений, к счастью, не нашли.'), d:{c:-f, n:-10, r:-30}, q:'meh', fine:f}; }},
+      {label:'Срочно позвать заведующую', dyn: s => { const f = Math.round(fineOf(s) * 0.7 / 500) * 500; return {out:'Тамара Викторовна взяла разговор на себя и выторговала предупреждение по одному пункту. ' + (f ? 'Штраф ' + rub(f) + '.' : '') + ' Остаток дня она рассказывала всем, кто виноват.', d:{c:-f, n:-18, r:-40}, q:'meh', fine:f}; }}
+    ],
+    fact:'Росздравнадзор проверяет, как аптеки соблюдают правила отпуска и хранения лекарств. За грубые нарушения лицензионных требований грозит крупный штраф или приостановка работы до 90 суток (ч. 4 ст. 14.1 КоАП).'
+  }
+};
+Object.keys(CARDS).forEach(k => { CARDS[k].id = k; });
+
+function fineOf(s){ return s.risk < 40 ? 0 : Math.round((s.risk - 30) * 300 / 500) * 500; }
+function found(s){
+  const n = s.log.filter(e => e.q === 'bad').length;
+  return n ? 'Нашли ' + n + ' ' + plural(n, ['нарушение','нарушения','нарушений']) + '.' : 'Нашли пару недочётов в журналах.';
+}
+
+/* ---------- Состояние ---------- */
+let S = null;
+
+function newShift(){
+  const pool = shuffle(Object.keys(CARDS).filter(id => !CARDS[id].fixed)).slice(0, 10);
+  S = {
+    phase:'play', step:0,
+    deck:['davlenie'].concat(pool.slice(0, 4), ['lunch'], pool.slice(4)),
+    cash:START.cash, trust:START.trust, nerves:START.nerves, risk:START.risk,
+    fines:0, log:[], inspected:false, over:null, last:null, saved:false, newBest:false
+  };
+  S.order = shuffle(CARDS[S.deck[0]].choices.map((_, i) => i));
+  render(true);
+}
+
+function clockAt(step){
+  const mins = 480 + Math.round(step * 720 / S.deck.length / 5) * 5;
+  return pad(Math.floor(mins / 60)) + ':' + pad(mins % 60);
+}
+
+function choose(ci){
+  if (!S || S.phase !== 'play') return;
+  const card = CARDS[S.deck[S.step]];
+  const ch = card.choices[ci];
+  const res = ch.dyn ? ch.dyn(S) : {out:ch.out, d:ch.d, q:ch.q};
+  const d = res.d || {};
+  const b = {cash:S.cash, trust:S.trust, nerves:S.nerves, risk:S.risk};
+  S.cash += d.c || 0;
+  S.trust = clamp(S.trust + (d.t || 0));
+  S.nerves = clamp(S.nerves + (d.n || 0));
+  S.risk = clamp(S.risk + (d.r || 0));
+  if (res.fine) S.fines += res.fine;
+  S.log.push({who:card.who, label:ch.label, q:res.q, time:clockAt(S.step)});
+  S.last = {out:res.out, ci:ci, fact:card.fact, d:{c:S.cash - b.cash, t:S.trust - b.trust, n:S.nerves - b.nerves, r:S.risk - b.risk}};
+  if (S.risk >= 100) S.over = 'license';
+  else if (S.trust <= 0) S.over = 'trust';
+  else if (S.nerves <= 0) S.over = 'nerves';
+  if (!S.over && !S.inspected && card.id !== 'inspection' && S.risk >= INSPECT_AT){
+    S.inspected = true;
+    S.deck.splice(S.step + 1, 0, 'inspection');
+  }
+  S.phase = 'result';
+  render();
+}
+
+function next(){
+  if (!S) return;
+  if (S.over || S.step >= S.deck.length - 1){ S.phase = 'end'; saveBest(); render(true); return; }
+  S.step++;
+  S.order = shuffle(CARDS[S.deck[S.step]].choices.map((_, i) => i));
+  S.phase = 'play';
+  S.last = null;
+  render(true);
+}
+
+/* ---------- Итог ---------- */
+const OVER = {
+  license:{title:'Работу аптеки приостановили', text:'Нарушений набралось столько, что Росздравнадзор пришёл надолго. За грубые нарушения аптеке грозит крупный штраф или приостановка работы до 90 суток.'},
+  trust:{title:'Район объявил вам бойкот', text:'Рейтинг на картах упал до 1,3 звезды. Бабушки у подъезда советуют аптеку через дорогу, и все их слушают.'},
+  nerves:{title:'Больничный посреди смены', text:'Нервы закончились раньше смены. Заведующая сама встала за первый стол и впервые за десять лет вспомнила, как это тяжело.'}
+};
+function rankOf(){
+  if (S.over) return OVER[S.over];
+  const planOk = S.cash >= PLAN;
+  if (planOk && S.trust >= 65 && S.risk < 50) return {title:'Фармацевт месяца', text:'План выполнен, покупатели довольны, проверки не страшны. Ваше фото висит у входа, рядом с огнетушителем.'};
+  if (S.risk >= 60) return {title:'Постоянный клиент Росздравнадзора', text:'Инспекторы знают вас по имени и уже не представляются. Касса полная, архив рецептов опасный.'};
+  if (planOk && S.trust < 45) return {title:'Машина допродаж', text:'Региональный менеджер ставит вас в пример. Покупатели ставят одну звезду. Все при деле.'};
+  if (S.trust >= 70 && S.risk < 40) return {title:'Фармацевт, к которому ходят по имени', text:'План не добран, зато в очереди спрашивают: «А этот фармацевт сегодня работает?» Лучшая реклама аптеки.'};
+  if (S.nerves <= 20) return {title:'Выжаты до последней капли', text:'Смена закрыта, но домой вы едете, глядя в одну точку. Возьмите выходной.'};
+  return {title:'Крепкий первостольник', text:'Без подвигов и без катастроф. Касса сошлась, совесть почти тоже.'};
+}
+function score(){ return Math.max(0, Math.round(S.cash / 100 + S.trust + S.nerves / 2 - S.risk - (S.over ? 50 : 0))); }
+function loadBest(){ try { return JSON.parse(localStorage.getItem('pervostolnik-best') || 'null'); } catch (e) { return null; } }
+function saveBest(){
+  if (S.saved) return; S.saved = true;
+  const sc = score(), b = loadBest();
+  if (!b || sc > b.score){
+    S.newBest = !!b;
+    try { localStorage.setItem('pervostolnik-best', JSON.stringify({score:sc, title:rankOf().title})); } catch (e) {}
+  }
+}
+
+/* ---------- Отрисовка ---------- */
+const app = document.getElementById('app');
+const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function header(){
+  const done = S && S.phase === 'end';
+  const time = !S ? '08:00' : done ? (S.over ? clockAt(S.step) : '20:00') : clockAt(S.step);
+  const sub = !S ? 'смена ещё не началась' : done ? (S.over ? 'смена прервана' : 'смена закрыта') : 'визит ' + (S.step + 1) + ' из ' + S.deck.length;
+  let steps = '';
+  if (S){
+    steps = '<div class="steps" aria-hidden="true">' + S.deck.map((_, i) => '<i class="' + (done || i < S.step || (i === S.step && S.phase === 'result') ? 'done' : i === S.step ? 'now' : '') + '"></i>').join('') + '</div>';
+  }
+  return '<header class="top"><div class="sign"><div class="cross" aria-hidden="true"></div><div><div class="sign-name">Аптека у метро</div><div class="sign-sub">Смена № ' + SHIFT_NO + ' · ' + fmtDate(today) + '</div></div></div>' +
+    '<div class="clock"><b>' + time + '</b><span>' + sub + '</span></div></header>' + steps;
+}
+
+function meters(d){
+  const lvl = (v, lo, hi, inverse) => inverse ? (v >= hi ? 'bad' : v >= lo ? 'warn' : '') : (v < lo ? 'bad' : v < hi ? 'warn' : '');
+  const list = [
+    {lab:'Касса', val:rub(S.cash), sub:'из ' + nf.format(PLAN), pct:clamp(S.cash / PLAN * 100), cls:'', dv:d && d.c, good:v => v > 0, fmt:v => sgn(v) + ' ₽'},
+    {lab:'Доверие', val:S.trust, sub:'/100', pct:S.trust, cls:lvl(S.trust, 25, 45), dv:d && d.t, good:v => v > 0, fmt:sgn},
+    {lab:'Нервы', val:S.nerves, sub:'/100', pct:S.nerves, cls:lvl(S.nerves, 20, 40), dv:d && d.n, good:v => v > 0, fmt:sgn},
+    {lab:'Риск проверки', val:S.risk, sub:'/100', pct:S.risk, cls:lvl(S.risk, 40, 70, true), dv:d && d.r, good:v => v < 0, fmt:sgn}
+  ];
+  return '<section class="meters" aria-label="Показатели смены">' + list.map(m =>
+    '<div class="meter"><div class="lab">' + m.lab + '</div><div class="val">' + m.val + '<small>' + m.sub + '</small></div>' +
+    '<div class="bar"><i class="' + m.cls + '" style="width:' + m.pct + '%"></i></div>' +
+    (m.dv ? '<span class="pop ' + (m.good(m.dv) ? 'up' : 'down') + '" aria-hidden="true">' + m.fmt(m.dv) + '</span>' : '') +
+    '</div>').join('') + '</section>';
+}
+
+function whoBlock(card){
+  const prop = card.prop ? card.prop() : '';
+  return '<div class="who"><div class="ava">' + avatar(card.av) + '</div><div class="who-text"><span class="tag">' + card.tag + '</span><div class="who-name">' + card.who + '</div><div class="who-role">' + card.role + '</div></div></div>' +
+    '<p class="say ' + (card.narr ? 'narr' : 'q') + '">' + card.say + '</p>' + prop;
+}
+
+function slip(card){
+  const L = S.last, d = L.d;
+  const rows = [];
+  if (d.c) rows.push(['Касса', sgn(d.c) + ' ₽', d.c > 0]);
+  if (d.t) rows.push(['Доверие', sgn(d.t), d.t > 0]);
+  if (d.n) rows.push(['Нервы', sgn(d.n), d.n > 0]);
+  if (d.r) rows.push(['Риск проверки', sgn(d.r), d.r < 0]);
+  const lines = rows.length ? rows.map(r => '<div class="r-line"><span>' + r[0] + '</span><span class="v ' + (r[2] ? 'up' : 'down') + '">' + r[1] + '</span></div>').join('') : '<div class="r-line"><span>Показатели</span><span class="v">без изменений</span></div>';
+  const alert = S.over ? '<hr class="r-hr"><div class="r-alert">СМЕНА ПРЕРВАНА</div>' : '';
+  const insp = S.inspected && card.id !== 'inspection' && S.deck[S.step + 1] === 'inspection' && !S.over ? '<hr class="r-hr"><div class="r-alert">В ДВЕРЯХ ЧЕЛОВЕК С ПАПКОЙ</div>' : '';
+  return '<div class="slip"><div class="receipt" role="status">' +
+    '<div class="r-head">Аптека у метро<br>Кассовый чек · визит ' + (S.step + 1) + ' · ' + clockAt(S.step) + '</div><hr class="r-hr">' +
+    '<p class="r-story">' + L.out + '</p><hr class="r-hr">' + lines +
+    '<hr class="r-hr"><div class="r-fact"><b>СПРАВКА</b>' + L.fact + '</div>' + insp + alert +
+    '</div></div>';
+}
+
+function renderStart(){
+  const best = loadBest();
+  app.innerHTML =
+    '<section class="intro">' +
+      '<div class="cross" aria-hidden="true"></div>' +
+      '<p class="eyebrow">Симулятор смены в российской аптеке</p>' +
+      '<h1>Первостольник</h1>' +
+      '<p class="lede">Вы фармацевт первого стола в аптеке у метро. Впереди двенадцать визитов: «белые круглые от давления», антибиотик «мне всегда без рецепта давали», тайный покупатель и заведующая с планом по БАДам.</p>' +
+      '<div class="legend">' +
+        '<div><b>Касса</b><p>План на смену 8 000 ₽. Честный совет обычно приносит меньше, чем допродажа.</p></div>' +
+        '<div><b>Доверие</b><p>Упадёт до нуля, и район уйдёт в аптеку напротив.</p></div>' +
+        '<div><b>Нервы</b><p>Закончатся раньше смены, и вы уйдёте на больничный.</p></div>' +
+        '<div><b>Риск проверки</b><p>Растёт от каждого нарушения. Рано или поздно придёт Росздравнадзор.</p></div>' +
+      '</div>' +
+      '<p class="rules">Каждое решение касса пробивает чеком со справкой: какое правило здесь действует на самом деле. В конце смены вас ждут Z-отчёт и звание. Отвечать можно клавишами 1, 2, 3.</p>' +
+      '<div class="actions"><button class="btn" id="go" type="button">Открыть окошко</button>' +
+      (best ? '<span class="best">Лучшая смена: ' + best.score + ' ' + plural(best.score, ['балл','балла','баллов']) + ' · «' + best.title + '»</span>' : '') + '</div>' +
+    '</section>' + footNote();
+  document.getElementById('go').addEventListener('click', newShift);
+}
+
+function renderGame(fresh){
+  const card = CARDS[S.deck[S.step]];
+  let body;
+  if (S.phase === 'play'){
+    body = '<div class="choices" role="group" aria-label="Варианты ответа">' + S.order.map((ci, k) =>
+      '<button class="choice" type="button" data-ci="' + ci + '"><kbd>' + (k + 1) + '</kbd><span>' + card.choices[ci].label + '</span></button>').join('') + '</div>';
+  } else {
+    const last = S.step >= S.deck.length - 1;
+    const btn = S.over ? 'Закрыть смену' : last ? 'Закрыть смену · Z-отчёт' : 'Следующий!';
+    body = '<p class="picked" id="picked"><span>Ваш ответ</span><b>' + card.choices[S.last.ci].label + '</b></p>' + slip(card) +
+      '<div class="actions"><button class="btn" id="next" type="button">' + btn + '</button></div>';
+  }
+  app.innerHTML = header() + meters(S.phase === 'result' ? S.last.d : null) +
+    '<article class="visit"' + (S.phase === 'result' ? ' style="animation:none"' : '') + '>' + whoBlock(card) + body + '</article>' + footNote();
+  if (S.phase === 'play'){
+    app.querySelectorAll('.choice').forEach(b => b.addEventListener('click', () => choose(+b.dataset.ci)));
+    if (fresh) window.scrollTo({top:0, behavior: reduce ? 'auto' : 'smooth'});
+  } else {
+    const nb = document.getElementById('next');
+    nb.addEventListener('click', next);
+    nb.focus({preventScroll:true});
+    const p = document.getElementById('picked');
+    if (p && p.getBoundingClientRect().top > window.innerHeight * 0.55) p.scrollIntoView({block:'start', behavior: reduce ? 'auto' : 'smooth'});
+  }
+}
+
+function renderEnd(){
+  const r = rankOf();
+  const ok = S.log.filter(e => e.q === 'ok').length, bad = S.log.filter(e => e.q === 'bad').length, meh = S.log.length - ok - bad;
+  const pct = Math.max(0, Math.round(S.cash / PLAN * 100));
+  const mark = {ok:'✓', bad:'✕', meh:'~'};
+  const endTime = S.over ? clockAt(S.step) : '20:00';
+  const log = S.log.map(e => '<li><span>' + e.time + '</span><span class="m ' + e.q + '">' + mark[e.q] + '</span><span>' + e.who + '<small>' + e.label + '</small></span></li>').join('');
+  const sc = score();
+  app.innerHTML = header() +
+    '<section class="rank">' +
+      '<p class="eyebrow' + (S.over ? ' over' : '') + '">' + (S.over ? 'Смена прервана' : 'Итог смены') + '</p>' +
+      '<h2>' + r.title + '</h2><p>' + r.text + '</p>' +
+    '</section>' +
+    '<div class="slip"><div class="receipt">' +
+      '<div class="r-head">Аптека у метро<br>Отчёт о закрытии смены (Z)<br>Смена № ' + SHIFT_NO + ' · ' + fmtDate(today) + ' ' + endTime + '</div><hr class="r-hr">' +
+      '<div class="r-line"><span>Визитов обслужено</span><span class="v">' + S.log.length + '</span></div>' +
+      '<div class="r-line"><span>Выручка</span><span class="v">' + rub(S.cash) + '</span></div>' +
+      '<div class="r-line"><span>План</span><span class="v">' + rub(PLAN) + '</span></div>' +
+      '<div class="r-line"><span>Выполнение плана</span><span class="v ' + (pct >= 100 ? 'up' : 'down') + '">' + pct + ' %</span></div>' +
+      '<div class="r-line"><span>В том числе штрафы</span><span class="v' + (S.fines ? ' down' : '') + '">' + rub(-S.fines) + '</span></div>' +
+      '<div class="r-line"><span>Доверие района</span><span class="v">' + S.trust + ' / 100</span></div>' +
+      '<div class="r-line"><span>Нервы</span><span class="v">' + S.nerves + ' / 100</span></div>' +
+      '<div class="r-line"><span>Риск проверки</span><span class="v">' + S.risk + ' / 100</span></div>' +
+      '<hr class="r-hr"><div class="r-head">Журнал решений</div><hr class="r-hr">' +
+      '<ol class="log">' + log + '</ol><hr class="r-hr">' +
+      '<div class="r-line"><span>✓ по правилам</span><span class="v">' + ok + '</span></div>' +
+      '<div class="r-line"><span>~ спорно</span><span class="v">' + meh + '</span></div>' +
+      '<div class="r-line"><span>✕ нарушения</span><span class="v' + (bad ? ' down' : '') + '">' + bad + '</span></div>' +
+      '<hr class="r-hr"><div class="r-line big"><span>ИТОГОВЫЙ БАЛЛ</span><span class="v">' + sc + '</span></div>' +
+      (S.newBest ? '<div class="r-head" style="margin-top:8px">Новый рекорд</div>' : '') +
+    '</div></div>' +
+    '<div class="actions"><button class="btn" id="again" type="button">Новая смена</button><button class="btn ghost" id="copy" type="button">Скопировать результат</button></div>' +
+    '<textarea id="copybox" readonly hidden aria-label="Текст результата"></textarea>' + footNote();
+  document.getElementById('again').addEventListener('click', newShift);
+  document.getElementById('copy').addEventListener('click', copyResult);
+  window.scrollTo({top:0, behavior: reduce ? 'auto' : 'smooth'});
+}
+
+function resultText(){
+  const r = rankOf();
+  const ok = S.log.filter(e => e.q === 'ok').length;
+  return 'Первостольник: «' + r.title + '». Выручка ' + rub(S.cash) + ' при плане ' + rub(PLAN) + ', доверие ' + S.trust + '/100, нервы ' + S.nerves + '/100, риск проверки ' + S.risk + '/100. По правилам ' + ok + ' из ' + S.log.length + ' решений. Балл: ' + score() + '.';
+}
+function copyResult(){
+  const btn = document.getElementById('copy');
+  const txt = resultText();
+  const fallback = () => {
+    const ta = document.getElementById('copybox');
+    ta.hidden = false; ta.value = txt; ta.focus(); ta.select();
+    btn.textContent = 'Выделено, нажмите Ctrl+C';
+  };
+  try {
+    navigator.clipboard.writeText(txt).then(() => { btn.textContent = 'Скопировано'; setTimeout(() => { btn.textContent = 'Скопировать результат'; }, 2000); }, fallback);
+  } catch (e) { fallback(); }
+}
+
+function footNote(){
+  return '<p class="foot">Аптека, персонажи и бренды вымышлены. Справки опираются на действующие нормы РФ: приказы Минздрава № 1094н и № 259н, постановление Правительства № 2463, КоАП. Это игра, а не медицинская или юридическая консультация.</p>';
+}
+
+function render(fresh){
+  if (!S) return renderStart();
+  if (S.phase === 'end') return renderEnd();
+  renderGame(fresh);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey || !S) return;
+  if (S.phase === 'play' && /^[1-3]$/.test(e.key)){
+    const ci = S.order[+e.key - 1];
+    if (ci !== undefined){ e.preventDefault(); choose(ci); }
+  }
+});
+
+/* Сохранение партии при обновлении страницы у открытых зрителей */
+try { if (window.claude && window.claude.hot && window.claude.hot.snapshot) window.claude.hot.snapshot(() => ({S:S})); } catch (e) {}
+function boot(data){ if (data && data.S && data.S.deck) S = data.S; render(); }
+const hot = window.claude && window.claude.hot;
+if (hot && hot.ready) hot.ready(boot); else boot((hot && hot.data) || {});
+})();
+</script>
+</body>
+</html>
